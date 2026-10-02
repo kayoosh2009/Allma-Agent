@@ -15,6 +15,9 @@ fn main() -> std::io::Result<()> {
         if k.code == KeyCode::Char('c') && k.modifiers.contains(KeyModifiers::CONTROL) {
             break Ok(());
         }
+        if k.code == KeyCode::Esc && !app.editing {
+            break Ok(());
+        }
         if !app.editing {
             match k.code {
                 KeyCode::Right => { app.next_tab(); continue; }

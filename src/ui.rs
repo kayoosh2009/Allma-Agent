@@ -92,7 +92,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     };
     let tabs = Tabs::new(["Chat", "Stats", "Settings"])
         .select(idx)
-        .block(Block::default().borders(Borders::ALL).title(" chatbuddy (←/→ — сменить вкладку) "))
+        .block(Block::default().borders(Borders::ALL).title(" Allma Agent (←/→ — сменить вкладку) "))
         .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD));
     f.render_widget(tabs, tabs_area);
 
