@@ -1,4 +1,8 @@
+mod ai;
 mod ui;
+
+use ai::AiEvent;
+use std::{sync::mpsc, time::Duration};
 
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ui::{App, Message, Tab};
@@ -6,8 +10,29 @@ use ui::{App, Message, Tab};
 fn main() -> std::io::Result<()> {
     let mut terminal = ratatui::init();
     let mut app = App::default();
+    let (tx, rx) = mpsc::channel::<AiEvent>();
     let res = (|| loop {
+        while let Ok(ev) = rx.try_recv() {
+            app.waiting = false;
+            match ev {
+                AiEvent::Reply { text, tokens } => {
+                    app.messages.push(Message { from_user: false, text });
+                    let s = &mut app.stats;
+                    s.day += tokens;
+                    s.week += tokens;
+                    s.month += tokens;
+                    s.total += tokens;
+                }
+                AiEvent::Error(e) => app.messages.push(Message {
+                    from_user: false,
+                    text: format!("⚠ {e}"),
+                }),
+            }
+        }
         terminal.draw(|f| ui::draw(f, &app))?;
+        if !event::poll(Duration::from_millis(100))? {
+            continue;
+        }
         let Event::Key(k) = event::read()? else { continue };
         if k.kind != KeyEventKind::Press {
             continue;
@@ -29,11 +54,28 @@ fn main() -> std::io::Result<()> {
             Tab::Chat => match k.code {
                 KeyCode::Char(c) => app.input.push(c),
                 KeyCode::Backspace => { app.input.pop(); }
-                KeyCode::Enter if !app.input.is_empty() => {
+                KeyCode::Enter if !app.input.is_empty() && !app.waiting => {
                     let text = std::mem::take(&mut app.input);
                     app.messages.push(Message { from_user: true, text });
                     app.stats.messages_sent += 1;
-                    // TODO: запрос к Ollama
+                    if app.api_key.is_empty() {
+                        app.messages.push(Message {
+                            from_user: false,
+                            text: "⚠ Нет API-ключа: вставь его во вкладке Settings".into(),
+                        });
+                    } else {
+                        app.waiting = true;
+                        let history = app
+                            .messages
+                            .iter()
+                            .filter(|m| !m.text.starts_with('⚠'))
+                            .map(|m| ai::ChatMsg {
+                                role: (if m.from_user { "user" } else { "assistant" }).into(),
+                                content: m.text.clone(),
+                            })
+                            .collect();
+                        ai::ask(app.api_key.clone(), app.model.clone(), history, tx.clone());
+                    }
                 }
                 _ => {}
             },
