@@ -135,27 +135,73 @@ fn draw_stats(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     let [info, bar] =
         Layout::vertical([Constraint::Min(0), Constraint::Length(3)]).areas(area);
 
-    let user = app.messages.iter().filter(|m| m.from_user).count();
-    let ai = app.messages.len() - user;
+    let s = &app.stats;
+    let sep = "─".repeat(info.width.saturating_sub(2) as usize);
     let text = vec![
-        Line::from(format!("Всего сообщений: {}", app.messages.len())),
-        Line::from(format!("Твоих: {user}")),
-        Line::from(format!("Ответов ИИ: {ai}")),
+        Line::from(format!("Отправлено сообщений: {}", fmt_num(s.messages_sent))),
+        stat_line("Токенов за день", s.day, s.prev_day),
+        stat_line("Токенов за неделю", s.week, s.prev_week),
+        stat_line("Токенов за месяц", s.month, s.prev_month),
+        Line::from(format!("Токенов за всё время: {}", fmt_num(s.total))),
+        Line::styled(sep, Style::default().fg(Color::DarkGray)),
+        Line::from(format!("Размер базы данных: {}", fmt_bytes(s.db_bytes))),
     ];
     f.render_widget(
         Paragraph::new(text).block(Block::default().borders(Borders::ALL).title(" Статистика ")),
         info,
     );
 
-    let ratio = (app.tokens_used as f64 / app.tokens_limit as f64).clamp(0.0, 1.0);
+    let ratio = (s.total as f64 / app.tokens_limit as f64).clamp(0.0, 1.0);
     f.render_widget(
         Gauge::default()
             .block(Block::default().borders(Borders::ALL).title(" Лимит токенов "))
             .gauge_style(Style::default().fg(Color::Cyan))
             .ratio(ratio)
-            .label(format!("{} / {}", app.tokens_used, app.tokens_limit)),
+            .label(format!("{} / {}", fmt_num(s.total), fmt_num(app.tokens_limit))),
         bar,
     );
+}
+
+fn stat_line(label: &str, cur: u64, prev: u64) -> Line<'static> {
+    let mut spans = vec![Span::raw(format!("{label}: {}  ", fmt_num(cur)))];
+    if prev == 0 {
+        spans.push(Span::styled("—", Style::default().fg(Color::DarkGray)));
+    } else {
+        let pct = (cur as f64 - prev as f64) / prev as f64 * 100.0;
+        let (arrow, color) = if pct >= 0.0 {
+            ("▲", Color::Red)
+        } else {
+            ("▼", Color::Green)
+        };
+        spans.push(Span::styled(
+            format!("{arrow} {:.1}%", pct.abs()),
+            Style::default().fg(color),
+        ));
+    }
+    Line::from(spans)
+}
+
+fn fmt_num(n: u64) -> String {
+    let s = n.to_string();
+    let mut out = String::new();
+    for (i, c) in s.chars().enumerate() {
+        if i > 0 && (s.len() - i) % 3 == 0 {
+            out.push(' ');
+        }
+        out.push(c);
+    }
+    out
+}
+
+fn fmt_bytes(b: u64) -> String {
+    const U: [&str; 4] = ["Б", "КБ", "МБ", "ГБ"];
+    let mut v = b as f64;
+    let mut i = 0;
+    while v >= 1024.0 && i < U.len() - 1 {
+        v /= 1024.0;
+        i += 1;
+    }
+    if i == 0 { format!("{b} Б") } else { format!("{v:.1} {}", U[i]) }
 }
 
 fn draw_settings(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
