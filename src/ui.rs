@@ -40,6 +40,7 @@ pub struct App {
     pub settings_sel: usize,
     pub editing: bool,
     pub stats: Stats,
+    pub waiting: bool,
     pub tokens_limit: u64,
 }
 
@@ -49,11 +50,12 @@ impl Default for App {
             tab: Tab::Chat,
             messages: vec![],
             input: String::new(),
-            api_key: String::new(),
+            api_key: std::env::var("OLLAMA_API_KEY").unwrap_or_default(),
             model: "gemma4:31b".into(),
             settings_sel: 0,
             editing: false,
             stats: Stats::default(),
+            waiting: false,
             tokens_limit: 3_000_000,
         }
     }
@@ -126,7 +128,7 @@ fn draw_chat(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     );
     f.render_widget(
         Paragraph::new(app.input.as_str())
-            .block(Block::default().borders(Borders::ALL).title(" Сообщение (Enter) ")),
+            .block(Block::default().borders(Borders::ALL).title(if app.waiting { " ИИ думает… " } else { " Сообщение (Enter) " })),
         input,
     );
 }
