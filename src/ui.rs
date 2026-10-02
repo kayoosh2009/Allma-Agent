@@ -1,7 +1,7 @@
 use ratatui::{
     layout::{Constraint, Layout},
     style::{Color, Modifier, Style},
-    text::Line,
+    text::{Line, Span},
     widgets::{Block, Borders, Gauge, List, ListItem, Paragraph, Tabs, Wrap},
     Frame,
 };
@@ -18,6 +18,19 @@ pub struct Message {
     pub text: String,
 }
 
+#[derive(Default)]
+pub struct Stats {
+    pub messages_sent: u64,
+    pub day: u64,
+    pub prev_day: u64,
+    pub week: u64,
+    pub prev_week: u64,
+    pub month: u64,
+    pub prev_month: u64,
+    pub total: u64,
+    pub db_bytes: u64,
+}
+
 pub struct App {
     pub tab: Tab,
     pub messages: Vec<Message>,
@@ -26,7 +39,7 @@ pub struct App {
     pub model: String,
     pub settings_sel: usize,
     pub editing: bool,
-    pub tokens_used: u64,
+    pub stats: Stats,
     pub tokens_limit: u64,
 }
 
@@ -40,7 +53,7 @@ impl Default for App {
             model: "gemma4:31b".into(),
             settings_sel: 0,
             editing: false,
-            tokens_used: 0,
+            stats: Stats::default(),
             tokens_limit: 3_000_000,
         }
     }
@@ -52,6 +65,14 @@ impl App {
             Tab::Chat => Tab::Stats,
             Tab::Stats => Tab::Settings,
             Tab::Settings => Tab::Chat,
+        };
+    }
+
+    pub fn prev_tab(&mut self) {
+        self.tab = match self.tab {
+            Tab::Chat => Tab::Settings,
+            Tab::Stats => Tab::Chat,
+            Tab::Settings => Tab::Stats,
         };
     }
 
@@ -71,7 +92,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     };
     let tabs = Tabs::new(["Chat", "Stats", "Settings"])
         .select(idx)
-        .block(Block::default().borders(Borders::ALL).title(" chatbuddy (Tab — сменить) "))
+        .block(Block::default().borders(Borders::ALL).title(" chatbuddy (←/→ — сменить вкладку) "))
         .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD));
     f.render_widget(tabs, tabs_area);
 
@@ -159,7 +180,7 @@ fn draw_settings(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
         List::new(items).block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(" Настройки (↑↓ выбор, Enter — править) "),
+                .title(" Настройки (↑↓ выбор, E — править) "),
         ),
         area,
     );
