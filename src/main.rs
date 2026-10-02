@@ -7,8 +7,14 @@ use std::{sync::mpsc, time::Duration};
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ui::{App, Message, Tab};
 
+use ratatui::crossterm::{
+    event::{DisableBracketedPaste, EnableBracketedPaste},
+    execute,
+};
+
 fn main() -> std::io::Result<()> {
     let mut terminal = ratatui::init();
+    let _ = execute!(std::io::stdout(), EnableBracketedPaste);
     let mut app = App::default();
     let (tx, rx) = mpsc::channel::<AiEvent>();
     let res = (|| loop {
@@ -33,7 +39,23 @@ fn main() -> std::io::Result<()> {
         if !event::poll(Duration::from_millis(100))? {
             continue;
         }
-        let Event::Key(k) = event::read()? else { continue };
+        let k = match event::read()? {
+            Event::Key(k) => k,
+            Event::Paste(text) => {
+                let clean: String = text
+                    .replace(['\r', '\n'], " ")
+                    .chars()
+                    .filter(|c| !c.is_control())
+                    .collect();
+                if app.tab == Tab::Settings && app.editing {
+                    app.field_mut().push_str(clean.trim());
+                } else if app.tab == Tab::Chat {
+                    app.input.push_str(&clean);
+                }
+                continue;
+            }
+            _ => continue,
+        };
         if k.kind != KeyEventKind::Press {
             continue;
         }
@@ -94,6 +116,7 @@ fn main() -> std::io::Result<()> {
             Tab::Stats => {}
         }
     })();
+    let _ = execute!(std::io::stdout(), DisableBracketedPaste);
     ratatui::restore();
     res
 }
