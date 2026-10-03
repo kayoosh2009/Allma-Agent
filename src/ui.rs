@@ -45,6 +45,7 @@ pub struct App {
     pub stats: Stats,
     pub waiting: bool,
     pub scroll: i32, // смещение относительно последнего сообщения (минус — вверх)
+    pub data_dir: String,
     pub tokens_limit: u64,
 }
 
@@ -61,6 +62,7 @@ impl Default for App {
             stats: Stats::default(),
             waiting: false,
             scroll: 0,
+            data_dir: String::new(),
             tokens_limit: 3_000_000,
         }
     }
@@ -259,12 +261,27 @@ fn draw_settings(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
             ListItem::new(format!("{r}{mark}")).style(style)
         })
         .collect();
+    let [list, files] =
+        Layout::vertical([Constraint::Min(0), Constraint::Length(6)]).areas(area);
     f.render_widget(
         List::new(items).block(
             Block::default()
                 .borders(Borders::ALL)
                 .title(" Настройки (↑↓ выбор, E — править) "),
         ),
-        area,
+        list,
+    );
+    let d = &app.data_dir;
+    let text = vec![
+        Line::from(format!("Папка:   {d}")),
+        Line::from(format!("База:    {d}/allma.db")),
+        Line::from(format!("Дневник: {d}/diary.md")),
+        Line::from(format!("Промпт:  {d}/prompt.txt")),
+    ];
+    f.render_widget(
+        Paragraph::new(text)
+            .wrap(Wrap { trim: false })
+            .block(Block::default().borders(Borders::ALL).title(" Файлы (можно править вручную) ")),
+        files,
     );
 }

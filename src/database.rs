@@ -105,7 +105,7 @@ impl Db {
             .unwrap_or(0);
         let _ = self.set_setting("clear_id", &max.to_string());
     }
-    
+
     // ---------- настройки ----------
 
     pub fn get_setting(&self, key: &str) -> Option<String> {
@@ -167,6 +167,10 @@ impl Db {
         }
     }
 
+        pub fn dir_path(&self) -> String {
+        self.dir.display().to_string()
+    }
+    
     // ---------- дневник ----------
 
     pub fn diary_path(&self) -> PathBuf {

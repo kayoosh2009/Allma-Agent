@@ -36,6 +36,7 @@ fn main() -> std::io::Result<()> {
         .map(|(from_user, text)| Message { from_user, text })
         .collect();
     app.stats = db.stats();
+    app.data_dir = db.dir_path();
     if let Some(k) = db.get_setting("api_key") {
         app.api_key = k;
     }
