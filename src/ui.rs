@@ -113,21 +113,28 @@ fn draw_chat(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     let [log, input] =
         Layout::vertical([Constraint::Min(0), Constraint::Length(h)]).areas(area);
 
+    let user_color = Color::Rgb(120, 120, 120); // серый — твои сообщения
+    let ai_color = Color::Rgb(255, 255, 255); // белый — ответы ИИ
+    let diary_color = Color::Rgb(80, 160, 160); // запись в дневник
+
     let mut lines: Vec<Line> = vec![];
-    for m in &app.messages {
+    for (n, m) in app.messages.iter().enumerate() {
+        if n > 0 {
+            lines.push(Line::raw(""));
+        }
         if m.from_user {
             for (i, l) in m.text.split('\n').enumerate() {
                 let pre = if i == 0 { format!("{USER_MARK} ") } else { "  ".into() };
-                lines.push(Line::styled(format!("{pre}{l}"), Style::default().fg(Color::Gray)));
+                lines.push(Line::styled(format!("{pre}{l}"), Style::default().fg(user_color)));
             }
         } else {
-            lines.push(Line::raw(""));
             for l in m.text.split('\n') {
-                let color = if l.starts_with(DIARY_MARK) { Color::DarkGray } else { Color::White };
+                let color = if l.starts_with(DIARY_MARK) { diary_color } else { ai_color };
                 lines.push(Line::styled(l.to_string(), Style::default().fg(color)));
             }
         }
     }
+    
     f.render_widget(
         Paragraph::new(lines)
             .wrap(Wrap { trim: false })
