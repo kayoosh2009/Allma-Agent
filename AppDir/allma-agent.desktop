@@ -1,8 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Allma Agent
-Comment=Terminal AI chat
-Exec=allma-agent
-Icon=allma-agent
-Terminal=true
-Categories=Utility;
