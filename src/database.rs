@@ -183,3 +183,4 @@ impl Db {
     pub fn read_prompt(&self) -> String {
         fs::read_to_string(self.prompt_path()).unwrap_or_else(|_| DEFAULT_PROMPT.into())
     }
+}
