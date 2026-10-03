@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-pub const USER_MARK: &str = "》 "; // символ перед твоим сообщением
+pub const USER_MARK: &str = "》"; // символ перед твоим сообщением
 pub const DIARY_MARK: &str = "❋"; // символ записи в дневник
 
 #[derive(Clone, Copy, PartialEq)]
@@ -113,7 +113,14 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 }
 
 fn draw_chat(f: &mut Frame, app: &mut App, area: ratatui::layout::Rect) {
-    let h = (app.input.split('\n').count() as u16 + 2).min(8);
+    let iw = area.width.saturating_sub(2).max(1);
+    let mut need = Paragraph::new(app.input.as_str())
+        .wrap(Wrap { trim: false })
+        .line_count(iw) as u16;
+    if app.input.ends_with('\n') {
+        need += 1;
+    }
+    let h = (need.max(1) + 2).min(8);
     let [log, input] =
         Layout::vertical([Constraint::Min(0), Constraint::Length(h)]).areas(area);
 
@@ -161,6 +168,7 @@ fn draw_chat(f: &mut Frame, app: &mut App, area: ratatui::layout::Rect) {
     f.render_widget(
         Paragraph::new(app.input.as_str())
             .wrap(Wrap { trim: false })
+            .scroll((need.saturating_sub(h - 2), 0))
             .block(Block::default().borders(Borders::ALL).title(if app.waiting { " ИИ думает… " } else { " Enter — отправить, Shift+Enter — новая строка " })),
         input,
     );
