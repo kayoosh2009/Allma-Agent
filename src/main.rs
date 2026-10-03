@@ -1,4 +1,5 @@
 mod ai;
+mod database;
 mod ui;
 
 use ai::AiEvent;
@@ -13,21 +14,31 @@ use ratatui::crossterm::{
 };
 
 fn main() -> std::io::Result<()> {
+    let db = database::Db::open().expect("не удалось открыть базу данных");
     let mut terminal = ratatui::init();
     let _ = execute!(std::io::stdout(), EnableBracketedPaste);
     let mut app = App::default();
+    app.messages = db
+        .load_messages()
+        .into_iter()
+        .map(|(from_user, text)| Message { from_user, text })
+        .collect();
+    app.stats = db.stats();
+    if let Some(k) = db.get_setting("api_key") {
+        app.api_key = k;
+    }
+    if let Some(m) = db.get_setting("model") {
+        app.model = m;
+    }
     let (tx, rx) = mpsc::channel::<AiEvent>();
     let res = (|| loop {
         while let Ok(ev) = rx.try_recv() {
             app.waiting = false;
             match ev {
                 AiEvent::Reply { text, tokens } => {
+                    let _ = db.add_message(false, &text, tokens);
                     app.messages.push(Message { from_user: false, text });
-                    let s = &mut app.stats;
-                    s.day += tokens;
-                    s.week += tokens;
-                    s.month += tokens;
-                    s.total += tokens;
+                    app.stats = db.stats();
                 }
                 AiEvent::Error(e) => app.messages.push(Message {
                     from_user: false,
@@ -78,8 +89,9 @@ fn main() -> std::io::Result<()> {
                 KeyCode::Backspace => { app.input.pop(); }
                 KeyCode::Enter if !app.input.is_empty() && !app.waiting => {
                     let text = std::mem::take(&mut app.input);
+                    let _ = db.add_message(true, &text, 0);
                     app.messages.push(Message { from_user: true, text });
-                    app.stats.messages_sent += 1;
+                    app.stats = db.stats();
                     if app.api_key.is_empty() {
                         app.messages.push(Message {
                             from_user: false,
@@ -104,7 +116,11 @@ fn main() -> std::io::Result<()> {
             Tab::Settings if app.editing => match k.code {
                 KeyCode::Char(c) => app.field_mut().push(c),
                 KeyCode::Backspace => { app.field_mut().pop(); }
-                KeyCode::Enter | KeyCode::Esc => app.editing = false,
+                KeyCode::Enter | KeyCode::Esc => {
+                    app.editing = false;
+                    let _ = db.set_setting("api_key", &app.api_key);
+                    let _ = db.set_setting("model", &app.model);
+                }
                 _ => {}
             },
             Tab::Settings => match k.code {
