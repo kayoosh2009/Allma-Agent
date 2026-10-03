@@ -44,6 +44,7 @@ pub struct App {
     pub editing: bool,
     pub stats: Stats,
     pub waiting: bool,
+    pub scroll: i32, // смещение относительно последнего сообщения (минус — вверх)
     pub tokens_limit: u64,
 }
 
@@ -59,6 +60,7 @@ impl Default for App {
             editing: false,
             stats: Stats::default(),
             waiting: false,
+            scroll: 0,
             tokens_limit: 3_000_000,
         }
     }
@@ -86,7 +88,7 @@ impl App {
     }
 }
 
-pub fn draw(f: &mut Frame, app: &App) {
+pub fn draw(f: &mut Frame, app: &mut App) {
     let [tabs_area, body] =
         Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).areas(f.area());
 
@@ -108,7 +110,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     }
 }
 
-fn draw_chat(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
+fn draw_chat(f: &mut Frame, app: &mut App, area: ratatui::layout::Rect) {
     let h = (app.input.split('\n').count() as u16 + 2).min(8);
     let [log, input] =
         Layout::vertical([Constraint::Min(0), Constraint::Length(h)]).areas(area);
@@ -117,12 +119,17 @@ fn draw_chat(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     let ai_color = Color::Rgb(255, 255, 255); // белый — ответы ИИ
     let diary_color = Color::Rgb(80, 160, 160); // запись в дневник
 
+    let last_user = app.messages.iter().rposition(|m| m.from_user);
+    let mut anchor_idx = 0;
     let mut lines: Vec<Line> = vec![];
     for (n, m) in app.messages.iter().enumerate() {
         if n > 0 {
             lines.push(Line::raw(""));
         }
         if m.from_user {
+            if Some(n) == last_user {
+                anchor_idx = lines.len();
+            }
             for (i, l) in m.text.split('\n').enumerate() {
                 let pre = if i == 0 { format!("{USER_MARK} ") } else { "  ".into() };
                 lines.push(Line::styled(format!("{pre}{l}"), Style::default().fg(user_color)));
@@ -134,13 +141,21 @@ fn draw_chat(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
             }
         }
     }
-    
-    f.render_widget(
-        Paragraph::new(lines)
-            .wrap(Wrap { trim: false })
-            .block(Block::default().borders(Borders::ALL).title(" Чат ")),
-        log,
-    );
+
+    let block = Block::default().borders(Borders::ALL).title(" Чат (↑↓ PgUp PgDn — прокрутка) ");
+    let inner = block.inner(log);
+    let w = inner.width.max(1);
+    let anchor_y = if anchor_idx == 0 {
+        0
+    } else {
+        chat_para(lines[..anchor_idx].to_vec()).line_count(w) as i32
+    };
+    let total = chat_para(lines.clone()).line_count(w) as i32;
+    let upper = anchor_y.max(total - inner.height as i32);
+    let y = (anchor_y + app.scroll).clamp(0, upper);
+    app.scroll = y - anchor_y;
+    f.render_widget(block, log);
+    f.render_widget(chat_para(lines).scroll((y as u16, 0)), inner);
     f.render_widget(
         Paragraph::new(app.input.as_str())
             .wrap(Wrap { trim: false })
@@ -178,6 +193,10 @@ fn draw_stats(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
             .label(format!("{} / {}", fmt_num(s.total), fmt_num(app.tokens_limit))),
         bar,
     );
+}
+
+fn chat_para(lines: Vec<Line<'static>>) -> Paragraph<'static> {
+    Paragraph::new(lines).wrap(Wrap { trim: false })
 }
 
 fn stat_line(label: &str, cur: u64, prev: u64) -> Line<'static> {

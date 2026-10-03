@@ -60,6 +60,7 @@ fn main() -> std::io::Result<()> {
                     }
                     let _ = db.add_message(false, &text, tokens);
                     app.messages.push(Message { from_user: false, text });
+                    app.scroll = 0;
                     app.stats = db.stats();
                 }
                 AiEvent::Error(e) => app.messages.push(Message {
@@ -68,7 +69,7 @@ fn main() -> std::io::Result<()> {
                 }),
             }
         }
-        terminal.draw(|f| ui::draw(f, &app))?;
+        terminal.draw(|f| ui::draw(f, &mut app))?;
         if !event::poll(Duration::from_millis(100))? {
             continue;
         }
@@ -108,6 +109,10 @@ fn main() -> std::io::Result<()> {
         }
         match app.tab {
             Tab::Chat => match k.code {
+                KeyCode::Up => app.scroll -= 1,
+                KeyCode::Down => app.scroll += 1,
+                KeyCode::PageUp => app.scroll -= 10,
+                KeyCode::PageDown => app.scroll += 10,
                 KeyCode::Char(c) => app.input.push(c),
                 KeyCode::Backspace => { app.input.pop(); }
                 KeyCode::Enter if k.modifiers.intersects(KeyModifiers::SHIFT | KeyModifiers::ALT) => {
@@ -115,8 +120,15 @@ fn main() -> std::io::Result<()> {
                 }
                 KeyCode::Enter if !app.input.is_empty() && !app.waiting => {
                     let text = std::mem::take(&mut app.input);
+                    if text.trim() == "/clear" {
+                        db.clear_chat();
+                        app.messages.clear();
+                        app.scroll = 0;
+                        continue;
+                    }
                     let _ = db.add_message(true, &text, 0);
                     app.messages.push(Message { from_user: true, text });
+                    app.scroll = 0;
                     app.stats = db.stats();
                     if app.api_key.is_empty() {
                         app.messages.push(Message {

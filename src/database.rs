@@ -80,19 +80,32 @@ impl Db {
     }
 
     pub fn load_messages(&self) -> Vec<(bool, String)> {
+        let from: i64 = self
+            .get_setting("clear_id")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
         let Ok(mut st) = self
             .conn
-            .prepare("SELECT role, content FROM messages ORDER BY id")
+            .prepare("SELECT role, content FROM messages WHERE id > ?1 ORDER BY id")
         else {
             return vec![];
         };
-        st.query_map([], |r| {
+        st.query_map([from], |r| {
             Ok((r.get::<_, String>(0)? == "user", r.get::<_, String>(1)?))
         })
         .map(|rows| rows.flatten().collect())
         .unwrap_or_default()
     }
 
+        /// Скрыть всю текущую переписку. Строки остаются в базе ради статистики.
+    pub fn clear_chat(&self) {
+        let max: i64 = self
+            .conn
+            .query_row("SELECT COALESCE(MAX(id), 0) FROM messages", [], |r| r.get(0))
+            .unwrap_or(0);
+        let _ = self.set_setting("clear_id", &max.to_string());
+    }
+    
     // ---------- настройки ----------
 
     pub fn get_setting(&self, key: &str) -> Option<String> {
