@@ -6,6 +6,9 @@ use ratatui::{
     Frame,
 };
 
+pub const USER_MARK: &str = "》 "; // символ перед твоим сообщением
+pub const DIARY_MARK: &str = "❋"; // символ записи в дневник
+
 #[derive(Clone, Copy, PartialEq)]
 pub enum Tab {
     Chat,
@@ -106,20 +109,25 @@ pub fn draw(f: &mut Frame, app: &App) {
 }
 
 fn draw_chat(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
+    let h = (app.input.split('\n').count() as u16 + 2).min(8);
     let [log, input] =
-        Layout::vertical([Constraint::Min(0), Constraint::Length(3)]).areas(area);
+        Layout::vertical([Constraint::Min(0), Constraint::Length(h)]).areas(area);
 
-    let lines: Vec<Line> = app
-        .messages
-        .iter()
-        .map(|m| {
-            if m.from_user {
-                Line::styled(format!("Ты: {}", m.text), Style::default().fg(Color::Green))
-            } else {
-                Line::styled(format!("ИИ: {}", m.text), Style::default().fg(Color::Yellow))
+    let mut lines: Vec<Line> = vec![];
+    for m in &app.messages {
+        if m.from_user {
+            for (i, l) in m.text.split('\n').enumerate() {
+                let pre = if i == 0 { format!("{USER_MARK} ") } else { "  ".into() };
+                lines.push(Line::styled(format!("{pre}{l}"), Style::default().fg(Color::Gray)));
             }
-        })
-        .collect();
+        } else {
+            lines.push(Line::raw(""));
+            for l in m.text.split('\n') {
+                let color = if l.starts_with(DIARY_MARK) { Color::DarkGray } else { Color::White };
+                lines.push(Line::styled(l.to_string(), Style::default().fg(color)));
+            }
+        }
+    }
     f.render_widget(
         Paragraph::new(lines)
             .wrap(Wrap { trim: false })
@@ -128,7 +136,8 @@ fn draw_chat(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     );
     f.render_widget(
         Paragraph::new(app.input.as_str())
-            .block(Block::default().borders(Borders::ALL).title(if app.waiting { " ИИ думает… " } else { " Сообщение (Enter) " })),
+            .wrap(Wrap { trim: false })
+            .block(Block::default().borders(Borders::ALL).title(if app.waiting { " ИИ думает… " } else { " Enter — отправить, Shift+Enter — новая строка " })),
         input,
     );
 }

@@ -9,7 +9,10 @@ use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers
 use ui::{App, Message, Tab};
 
 use ratatui::crossterm::{
-    event::{DisableBracketedPaste, EnableBracketedPaste},
+    event::{
+        DisableBracketedPaste, EnableBracketedPaste, KeyboardEnhancementFlags,
+        PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+    },
     execute,
 };
 
@@ -17,6 +20,15 @@ fn main() -> std::io::Result<()> {
     let db = database::Db::open().expect("не удалось открыть базу данных");
     let mut terminal = ratatui::init();
     let _ = execute!(std::io::stdout(), EnableBracketedPaste);
+    if ratatui::crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false) {
+        let _ = execute!(
+            std::io::stdout(),
+            PushKeyboardEnhancementFlags(
+                KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+                    | KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES
+            )
+        );
+    }
     let mut app = App::default();
     app.messages = db
         .load_messages()
