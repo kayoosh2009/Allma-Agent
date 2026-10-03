@@ -127,6 +127,10 @@ fn main() -> std::io::Result<()> {
                         app.scroll = 0;
                         continue;
                     }
+                    let web = text
+                        .strip_prefix("/web")
+                        .filter(|r| r.is_empty() || r.starts_with(' '))
+                        .map(|r| r.trim().to_string());
                     let _ = db.add_message(true, &text, 0);
                     app.messages.push(Message { from_user: true, text });
                     app.scroll = 0;
@@ -159,7 +163,17 @@ fn main() -> std::io::Result<()> {
                                 content: ai::system_prompt(&db.read_prompt(), &db.read_diary()),
                             },
                         );
-                        ai::ask(app.api_key.clone(), app.model.clone(), history, tx.clone());
+                        match web {
+                            Some(arg) => ai::ask_web(
+                                app.api_key.clone(),
+                                app.model.clone(),
+                                history,
+                                arg,
+                                db.shots_dir(),
+                                tx.clone(),
+                            ),
+                            None => ai::ask(app.api_key.clone(), app.model.clone(), history, tx.clone()),
+                        }
                     }
                 }
                 _ => {}

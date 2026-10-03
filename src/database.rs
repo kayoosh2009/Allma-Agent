@@ -191,6 +191,13 @@ impl Db {
         fs::write(self.diary_path(), text)
     }
 
+
+        pub fn shots_dir(&self) -> PathBuf {
+        let d = self.dir.join("screenshots");
+        let _ = fs::create_dir_all(&d);
+        d
+    }
+    
     // ---------- промпт ----------
 
     pub fn prompt_path(&self) -> PathBuf {
