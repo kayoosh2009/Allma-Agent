@@ -62,3 +62,38 @@ fn request(key: &str, model: &str, history: &[ChatMsg]) -> Result<(String, u64),
     let r: Resp = resp.json().map_err(|e| e.to_string())?;
     Ok((r.message.content, r.prompt_eval_count + r.eval_count))
 }
+
+/// Системный промпт: твой prompt.txt + дневник + служебная инструкция про <diary>.
+/// Инструкция зашита в код, чтобы правка prompt.txt не сломала механизм дневника.
+pub fn system_prompt(prompt: &str, diary: &str) -> String {
+    format!(
+        "{prompt}\n\n\
+         # Дневник\n\
+         Ниже твои записи о собеседнике. Опирайся на них в разговоре.\n\n\
+         {diary}\n\n\
+         # Как вести дневник\n\
+         Узнав о собеседнике что-то новое и важное (имя, проекты, стек, предпочтения, привычки), \
+         добавь в ответ тег <diary>короткая заметка</diary>. \
+         Одна заметка — один факт. Не повторяй то, что уже есть в дневнике. \
+         Не записывай мелочи и пароли/ключи. Тег пользователь не увидит."
+    )
+}
+
+/// Вырезает из ответа теги <diary>…</diary>, возвращает (чистый текст, заметки).
+pub fn extract_diary(text: &str) -> (String, Vec<String>) {
+    let mut clean = String::new();
+    let mut notes = vec![];
+    let mut rest = text;
+    while let Some(start) = rest.find("<diary>") {
+        let after = &rest[start + 7..];
+        let Some(end) = after.find("</diary>") else { break };
+        clean.push_str(&rest[..start]);
+        let note = after[..end].trim();
+        if !note.is_empty() {
+            notes.push(note.to_string());
+        }
+        rest = &after[end + 8..];
+    }
+    clean.push_str(rest);
+    (clean.trim().to_string(), notes)
+}

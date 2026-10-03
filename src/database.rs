@@ -8,6 +8,12 @@ use std::{
 };
 
 const DAY: i64 = 86_400;
+const DEFAULT_PROMPT: &str = "Ты — Allma, дружелюбный ИИ-помощник и друг разработчика.
+Общайся тепло и по-человечески, на «ты», без лишней официальности.
+Отвечай на языке собеседника, по делу и без воды.
+Код оформляй блоками, объясняй коротко и понятно.
+Если чего-то не знаешь — честно скажи об этом.
+";
 
 pub struct Db {
     conn: Connection,
@@ -49,6 +55,9 @@ impl Db {
         let _ = fs::set_permissions(&db_path, fs::Permissions::from_mode(0o600));
 
         let db = Self { conn, dir };
+        if !db.prompt_path().exists() {
+            fs::write(db.prompt_path(), DEFAULT_PROMPT).map_err(|e| e.to_string())?;
+        }
         if !db.diary_path().exists() {
             fs::write(db.diary_path(), "# Дневник\n\n").map_err(|e| e.to_string())?;
         }
@@ -165,8 +174,12 @@ impl Db {
         fs::write(self.diary_path(), text)
     }
 
-    /// Полностью заменить дневник (чтобы ИИ мог переписывать и чистить записи).
-    pub fn write_diary(&self, text: &str) -> std::io::Result<()> {
-        fs::write(self.diary_path(), text)
+    // ---------- промпт ----------
+
+    pub fn prompt_path(&self) -> PathBuf {
+        self.dir.join("prompt.txt")
     }
-}
+
+    pub fn read_prompt(&self) -> String {
+        fs::read_to_string(self.prompt_path()).unwrap_or_else(|_| DEFAULT_PROMPT.into())
+    }

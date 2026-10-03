@@ -36,6 +36,13 @@ fn main() -> std::io::Result<()> {
             app.waiting = false;
             match ev {
                 AiEvent::Reply { text, tokens } => {
+                    let (mut text, notes) = ai::extract_diary(&text);
+                    for n in &notes {
+                        let _ = db.append_diary(&n.replace('\n', " "));
+                    }
+                    if text.is_empty() {
+                        text = "📝 Записал в дневник".into();
+                    }
                     let _ = db.add_message(false, &text, tokens);
                     app.messages.push(Message { from_user: false, text });
                     app.stats = db.stats();
@@ -99,7 +106,7 @@ fn main() -> std::io::Result<()> {
                         });
                     } else {
                         app.waiting = true;
-                        let history = app
+                        let mut history: Vec<ai::ChatMsg> = app
                             .messages
                             .iter()
                             .filter(|m| !m.text.starts_with('⚠'))
@@ -108,6 +115,13 @@ fn main() -> std::io::Result<()> {
                                 content: m.text.clone(),
                             })
                             .collect();
+                        history.insert(
+                            0,
+                            ai::ChatMsg {
+                                role: "system".into(),
+                                content: ai::system_prompt(&db.read_prompt(), &db.read_diary()),
+                            },
+                        );
                         ai::ask(app.api_key.clone(), app.model.clone(), history, tx.clone());
                     }
                 }
