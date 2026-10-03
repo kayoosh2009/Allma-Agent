@@ -52,8 +52,11 @@ fn main() -> std::io::Result<()> {
                     for n in &notes {
                         let _ = db.append_diary(&n.replace('\n', " "));
                     }
-                    if text.is_empty() {
-                        text = "📝 Записал в дневник".into();
+                    if !notes.is_empty() {
+                        if !text.is_empty() {
+                            text.push_str("\n\n");
+                        }
+                        text.push_str(&format!("{} Записал в дневник", ui::DIARY_MARK));
                     }
                     let _ = db.add_message(false, &text, tokens);
                     app.messages.push(Message { from_user: false, text });
@@ -73,12 +76,13 @@ fn main() -> std::io::Result<()> {
             Event::Key(k) => k,
             Event::Paste(text) => {
                 let clean: String = text
-                    .replace(['\r', '\n'], " ")
+                    .replace("\r\n", "\n")
+                    .replace('\r', "\n")
                     .chars()
-                    .filter(|c| !c.is_control())
+                    .filter(|c| *c == '\n' || !c.is_control())
                     .collect();
                 if app.tab == Tab::Settings && app.editing {
-                    app.field_mut().push_str(clean.trim());
+                    app.field_mut().push_str(clean.replace('\n', " ").trim());
                 } else if app.tab == Tab::Chat {
                     app.input.push_str(&clean);
                 }
@@ -106,6 +110,9 @@ fn main() -> std::io::Result<()> {
             Tab::Chat => match k.code {
                 KeyCode::Char(c) => app.input.push(c),
                 KeyCode::Backspace => { app.input.pop(); }
+                KeyCode::Enter if k.modifiers.intersects(KeyModifiers::SHIFT | KeyModifiers::ALT) => {
+                    app.input.push('\n')
+                }
                 KeyCode::Enter if !app.input.is_empty() && !app.waiting => {
                     let text = std::mem::take(&mut app.input);
                     let _ = db.add_message(true, &text, 0);
@@ -124,7 +131,12 @@ fn main() -> std::io::Result<()> {
                             .filter(|m| !m.text.starts_with('⚠'))
                             .map(|m| ai::ChatMsg {
                                 role: (if m.from_user { "user" } else { "assistant" }).into(),
-                                content: m.text.clone(),
+                                content: m
+                                    .text
+                                    .lines()
+                                    .filter(|l| !l.starts_with(ui::DIARY_MARK))
+                                    .collect::<Vec<_>>()
+                                    .join("\n"),
                             })
                             .collect();
                         history.insert(
@@ -158,7 +170,7 @@ fn main() -> std::io::Result<()> {
             Tab::Stats => {}
         }
     })();
-    let _ = execute!(std::io::stdout(), DisableBracketedPaste);
+    let _ = execute!(std::io::stdout(), PopKeyboardEnhancementFlags, DisableBracketedPaste);
     ratatui::restore();
     res
 }
