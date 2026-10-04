@@ -106,6 +106,13 @@ impl Db {
         let _ = self.set_setting("clear_id", &max.to_string());
     }
 
+        /// Время сообщения перед только что добавленным.
+    pub fn prev_message_ts(&self) -> Option<i64> {
+        self.conn
+            .query_row("SELECT ts FROM messages ORDER BY id DESC LIMIT 1 OFFSET 1", [], |r| r.get(0))
+            .ok()
+    }
+    
     // ---------- настройки ----------
 
     pub fn get_setting(&self, key: &str) -> Option<String> {

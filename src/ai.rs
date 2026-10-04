@@ -66,9 +66,11 @@ fn request(key: &str, model: &str, messages: &serde_json::Value) -> Result<(Stri
 
 /// Системный промпт: твой prompt.txt + дневник + служебная инструкция про <diary>.
 /// Инструкция зашита в код, чтобы правка prompt.txt не сломала механизм дневника.
-pub fn system_prompt(prompt: &str, diary: &str) -> String {
+pub fn system_prompt(prompt: &str, diary: &str, time: &str) -> String {
     format!(
         "{prompt}\n\n\
+         # Время\n\
+         {time}\n\n\
          # Дневник\n\
          Ниже твои записи о собеседнике. Опирайся на них в разговоре.\n\n\
          {diary}\n\n\
@@ -195,4 +197,33 @@ fn screenshot(url: &str, dir: &std::path::Path) -> Result<std::path::PathBuf, St
         };
     }
     Err("не найден Chromium: sudo pacman -S chromium".into())
+}
+
+pub fn time_info(prev: Option<i64>) -> String {
+    use chrono::{DateTime, Datelike, Local};
+    const WD: [&str; 7] = [
+        "понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье",
+    ];
+    let fmt = |t: DateTime<Local>| {
+        format!(
+            "{} {}, {}",
+            t.format("%d.%m.%Y"),
+            t.format("%H:%M"),
+            WD[t.weekday().num_days_from_monday() as usize]
+        )
+    };
+    let now = Local::now();
+    let mut s = format!("Сейчас: {}.", fmt(now));
+    if let Some(p) = prev.and_then(|p| DateTime::from_timestamp(p, 0)) {
+        let p = p.with_timezone(&Local);
+        let m = (now - p).num_minutes().max(0);
+        let ago = match m {
+            0 => "меньше минуты".to_string(),
+            1..=59 => format!("{m} мин"),
+            60..=1439 => format!("{} ч {} мин", m / 60, m % 60),
+            _ => format!("{} дн {} ч", m / 1440, m % 1440 / 60),
+        };
+        s.push_str(&format!(" Предыдущее сообщение в чате: {} ({ago} назад).", fmt(p)));
+    }
+    s
 }
