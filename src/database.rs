@@ -7,7 +7,6 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-const DAY: i64 = 86_400;
 const DEFAULT_PROMPT: &str = "Ты — Allma, дружелюбный ИИ-помощник и друг разработчика.
 Общайся тепло и по-человечески, на «ты», без лишней официальности.
 Отвечай на языке собеседника, по делу и без воды.
@@ -24,6 +23,16 @@ fn now() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// Unix-время локальной полуночи для дня «N дней назад» (0 — сегодня).
+fn midnight(days_ago: u64) -> i64 {
+    use chrono::{Days, Local};
+    (Local::now().date_naive() - Days::new(days_ago))
+        .and_hms_opt(0, 0, 0)
+        .and_then(|t| t.and_local_timezone(Local).earliest())
+        .map(|t| t.timestamp())
         .unwrap_or(0)
 }
 
@@ -112,7 +121,7 @@ impl Db {
             .query_row("SELECT ts FROM messages ORDER BY id DESC LIMIT 1 OFFSET 1", [], |r| r.get(0))
             .ok()
     }
-    
+
     // ---------- настройки ----------
 
     pub fn get_setting(&self, key: &str) -> Option<String> {
@@ -146,11 +155,11 @@ impl Db {
 
     pub fn stats(&self) -> Stats {
         let t = now() + 1;
-        let period = |days: i64| {
-            let len = days * DAY;
+        let period = |days: u64| {
+            let start = midnight(days - 1);
             (
-                self.tokens_between(t - len, t),
-                self.tokens_between(t - 2 * len, t - len),
+                self.tokens_between(start, t),
+                self.tokens_between(midnight(2 * days - 1), start),
             )
         };
         let (day, prev_day) = period(1);

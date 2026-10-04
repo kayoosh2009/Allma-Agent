@@ -160,7 +160,11 @@ fn main() -> std::io::Result<()> {
                             0,
                             ai::ChatMsg {
                                 role: "system".into(),
-                                content: ai::system_prompt(&db.read_prompt(), &db.read_diary()),
+                                content: ai::system_prompt(
+                                    &db.read_prompt(),
+                                    &db.read_diary(),
+                                    &ai::time_info(db.prev_message_ts()),
+                                ),
                             },
                         );
                         match web {
