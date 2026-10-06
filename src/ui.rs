@@ -8,6 +8,7 @@ use ratatui::{
 
 pub const USER_MARK: &str = "》"; // символ перед твоим сообщением
 pub const DIARY_MARK: &str = "❋"; // символ записи в дневник
+pub const FILE_MARK: &str = "📎"; // символ перед именем файла
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Tab {
@@ -46,6 +47,7 @@ pub struct App {
     pub waiting: bool,
     pub scroll: i32, // смещение относительно последнего сообщения (минус — вверх)
     pub data_dir: String,
+    pub attachments: Vec<std::path::PathBuf>,
     pub tokens_limit: u64,
 }
 
@@ -63,6 +65,7 @@ impl Default for App {
             waiting: false,
             scroll: 0,
             data_dir: String::new(),
+            attachments: vec![],
             tokens_limit: 3_000_000,
         }
     }
@@ -114,10 +117,16 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
 fn draw_chat(f: &mut Frame, app: &mut App, area: ratatui::layout::Rect) {
     let iw = area.width.saturating_sub(2).max(1);
-    let mut need = Paragraph::new(app.input.as_str())
+    let chips: String = app
+        .attachments
+        .iter()
+        .map(|p| format!("{FILE_MARK} {}  ", fname(p)))
+        .collect();
+    let shown = format!("{chips}{}", app.input);
+    let mut need = Paragraph::new(shown.as_str())
         .wrap(Wrap { trim: false })
         .line_count(iw) as u16;
-    if app.input.ends_with('\n') {
+    if shown.ends_with('\n') {
         need += 1;
     }
     let h = (need.max(1) + 2).min(8);
@@ -166,7 +175,7 @@ fn draw_chat(f: &mut Frame, app: &mut App, area: ratatui::layout::Rect) {
     f.render_widget(block, log);
     f.render_widget(chat_para(lines).scroll((y as u16, 0)), inner);
     f.render_widget(
-        Paragraph::new(app.input.as_str())
+        Paragraph::new(shown)
             .wrap(Wrap { trim: false })
             .scroll((need.saturating_sub(h - 2), 0))
             .block(Block::default().borders(Borders::ALL).title(if app.waiting { " ИИ думает… " } else { " Enter — отправить, Shift+Enter — новая строка " })),
@@ -292,4 +301,87 @@ fn draw_settings(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
             .block(Block::default().borders(Borders::ALL).title(" Файлы (можно править вручную) ")),
         files,
     );
+}
+
+pub fn fname(p: &std::path::Path) -> String {
+    p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+}
+
+/// Если вставленный текст — это пути существующих файлов, возвращает их.
+pub fn dropped_files(text: &str) -> Vec<std::path::PathBuf> {
+    let one = |s: &str| -> Option<std::path::PathBuf> {
+        let s = s.trim();
+        let mut c = vec![s.to_string()];
+        if let Some(r) = s.strip_prefix("file://") {
+            c.push(percent_decode(r));
+        }
+        let t = shell_split(s);
+        if t.len() == 1 {
+            c.push(t[0].clone());
+        }
+        c.into_iter().map(std::path::PathBuf::from).find(|p| p.is_file())
+    };
+    let lines: Vec<&str> = text.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    let by_line: Vec<_> = lines.iter().filter_map(|l| one(l)).collect();
+    if !lines.is_empty() && by_line.len() == lines.len() {
+        return by_line;
+    }
+    let toks = shell_split(text);
+    let by_tok: Vec<_> = toks.iter().filter_map(|t| one(t)).collect();
+    if !toks.is_empty() && by_tok.len() == toks.len() { by_tok } else { vec![] }
+}
+
+fn shell_split(s: &str) -> Vec<String> {
+    let (mut out, mut cur, mut q, mut has) = (vec![], String::new(), None::<char>, false);
+    let mut it = s.chars();
+    while let Some(c) = it.next() {
+        match (c, q) {
+            ('\\', None) | ('\\', Some('"')) => {
+                if let Some(n) = it.next() {
+                    cur.push(n);
+                    has = true;
+                }
+            }
+            (c, Some(qc)) if c == qc => q = None,
+            ('\'' | '"', None) => {
+                q = Some(c);
+                has = true;
+            }
+            (c, None) if c.is_whitespace() => {
+                if has {
+                    out.push(std::mem::take(&mut cur));
+                    has = false;
+                }
+            }
+            (c, _) => {
+                cur.push(c);
+                has = true;
+            }
+        }
+    }
+    if has {
+        out.push(cur);
+    }
+    out
+}
+
+fn percent_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' && i + 2 < b.len() {
+            if let Some(v) = std::str::from_utf8(&b[i + 1..i + 3])
+                .ok()
+                .and_then(|h| u8::from_str_radix(h, 16).ok())
+            {
+                out.push(v);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }

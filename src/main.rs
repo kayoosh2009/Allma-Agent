@@ -86,7 +86,16 @@ fn main() -> std::io::Result<()> {
                 if app.tab == Tab::Settings && app.editing {
                     app.field_mut().push_str(clean.replace('\n', " ").trim());
                 } else if app.tab == Tab::Chat {
-                    app.input.push_str(&clean);
+                    let files = ui::dropped_files(&text);
+                    if files.is_empty() {
+                        app.input.push_str(&clean);
+                    } else {
+                        for f in files {
+                            if !app.attachments.contains(&f) {
+                                app.attachments.push(f);
+                            }
+                        }
+                    }
                 }
                 continue;
             }
@@ -115,11 +124,15 @@ fn main() -> std::io::Result<()> {
                 KeyCode::PageUp => app.scroll -= 10,
                 KeyCode::PageDown => app.scroll += 10,
                 KeyCode::Char(c) => app.input.push(c),
-                KeyCode::Backspace => { app.input.pop(); }
+                KeyCode::Backspace => {
+                    if app.input.pop().is_none() {
+                        app.attachments.pop();
+                    }
+                }
                 KeyCode::Enter if k.modifiers.intersects(KeyModifiers::SHIFT | KeyModifiers::ALT) => {
                     app.input.push('\n')
                 }
-                KeyCode::Enter if !app.input.is_empty() && !app.waiting => {
+                KeyCode::Enter if !(app.input.is_empty() && app.attachments.is_empty()) && !app.waiting => {
                     let text = std::mem::take(&mut app.input);
                     if text.trim() == "/clear" {
                         db.clear_chat();
@@ -131,6 +144,17 @@ fn main() -> std::io::Result<()> {
                         .strip_prefix("/web")
                         .filter(|r| r.is_empty() || r.starts_with(' '))
                         .map(|r| r.trim().to_string());
+                    let files = std::mem::take(&mut app.attachments);
+                    let text = if files.is_empty() {
+                        text
+                    } else {
+                        let names = files
+                            .iter()
+                            .map(|p| format!("{} {}", ui::FILE_MARK, ui::fname(p)))
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        if text.is_empty() { names } else { format!("{names}\n{text}") }
+                    };
                     let _ = db.add_message(true, &text, 0);
                     app.messages.push(Message { from_user: true, text });
                     app.scroll = 0;
@@ -174,6 +198,13 @@ fn main() -> std::io::Result<()> {
                                 history,
                                 arg,
                                 db.shots_dir(),
+                                tx.clone(),
+                            ),
+                            None if !files.is_empty() => ai::ask_files(
+                                app.api_key.clone(),
+                                app.model.clone(),
+                                history,
+                                files,
                                 tx.clone(),
                             ),
                             None => ai::ask(app.api_key.clone(), app.model.clone(), history, tx.clone()),
